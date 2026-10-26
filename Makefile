@@ -8,9 +8,12 @@ LIB_ARCHIVE := $(BIN_DIR)/$(APP_NAME).a
 run: build
 	@./$(BIN)
 
-build:
+build: download_deps
 	@mkdir -p $(BIN_DIR)
 	go build -buildmode=archive -o $(LIB_ARCHIVE) $(LIB_PKG)
+
+download_deps:
+	@go get filippo.io/edwards25519
 
 clean:
 	@rm -rf $(BIN_DIR)

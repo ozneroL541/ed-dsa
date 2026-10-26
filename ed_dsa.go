@@ -1,17 +1,13 @@
 package eddsa
 
 import (
-	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha512"
 	"encoding/hex"
-	"math/big"
+
+	"filippo.io/edwards25519"
 )
 
-// Group order L for Curve25519[cite: 2]
-var L, _ = new(big.Int).SetString("72370055773322622139731865630429942408571163593799076060019509382854642533060", 10)
-
-// Small order points as listed in Table 1 / Appendix B of[cite: 2]
 var smallOrderPoints = [][]byte{
 	hexToBytes("0100000000000000000000000000000000000000000000000000000000000000"),
 	hexToBytes("ECFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"),
@@ -29,25 +25,9 @@ var smallOrderPoints = [][]byte{
 	hexToBytes("EDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"),
 }
 
-// VerificationTuple represents a message, public key, and signature tuple for batch verification[cite: 2]
-type VerificationTuple struct {
-	Mi []byte
-	Ai []byte
-	Ri []byte
-	Si []byte
-}
-
 func hexToBytes(s string) []byte {
 	b, _ := hex.DecodeString(s)
 	return b
-}
-
-func reverseBytes(b []byte) []byte {
-	res := make([]byte, len(b))
-	for i := 0; i < len(b); i++ {
-		res[i] = b[len(b)-1-i]
-	}
-	return res
 }
 
 func bytesEqual(a, b []byte) bool {
@@ -62,6 +42,13 @@ func bytesEqual(a, b []byte) bool {
 	return true
 }
 
+type VerificationTuple struct {
+	Mi []byte
+	Ai []byte
+	Ri []byte
+	Si []byte
+}
+
 /**
  * Key Generation
  */
@@ -74,20 +61,15 @@ func KeyGen() ([]byte, []byte) {
 	h := sha512.Sum512(sk)
 
 	// 3. Compute a secret scalar s = 2^254 + h_253 * 2^253 + · · · + h3 · 2^3 3[cite: 2].
-	sBytes := make([]byte, 32)
-	copy(sBytes, h[0:32])
-	sBytes[0] &= 248
-	sBytes[31] &= 127
-	sBytes[31] |= 64
-	s := new(big.Int).SetBytes(reverseBytes(sBytes))
-	_ = s
+	s, _ := edwards25519.NewScalar().SetBytesWithClamping(h[0:32])
 
 	// 4. Compute the public key pk = A, where A = s · B[cite: 2].
-	privKey := ed25519.NewKeyFromSeed(sk)
-	pk := privKey[32:]
-	A := pk
+	B := edwards25519.NewGeneratorPoint()
+	_ = B
+	A := (&edwards25519.Point{}).ScalarBaseMult(s)
+	pk := A.Bytes()
 
-	return sk, A
+	return sk, pk
 }
 
 /**
@@ -97,40 +79,36 @@ func KeyGen() ([]byte, []byte) {
 func SigGen(sk []byte, A []byte, M []byte) ([]byte, []byte) {
 	h := sha512.Sum512(sk)
 	h256Through511 := h[32:]
-
-	sBytes := make([]byte, 32)
-	copy(sBytes, h[0:32])
-	sBytes[0] &= 248
-	sBytes[31] &= 127
-	sBytes[31] |= 64
-	s := new(big.Int).SetBytes(reverseBytes(sBytes))
-	_ = s
+	s, _ := edwards25519.NewScalar().SetBytesWithClamping(h[0:32])
 
 	// 5. Generate a 512-bits pseudorandom nonce r := SHA512(h256|| . . . ||h511||M)[cite: 2].
 	hasher := sha512.New()
 	hasher.Write(h256Through511)
 	hasher.Write(M)
 	rDigest := hasher.Sum(nil)
-	rScalar := new(big.Int).SetBytes(reverseBytes(rDigest))
-	rScalar.Mod(rScalar, L)
+	r, _ := edwards25519.NewScalar().SetUniformBytes(rDigest)
 
 	// 6. Interpret the nonce as a scalar and obtain a curve point: R := r · B[cite: 2].
-	privKey := ed25519.NewKeyFromSeed(sk)
-	sig := ed25519.Sign(privKey, M)
-	R := sig[:32]
+	B := edwards25519.NewGeneratorPoint()
+	_ = B
+	R := (&edwards25519.Point{}).ScalarBaseMult(r)
 
 	// 7. Compute the scalar S := (r + SHA512(R||A||M) * s) mod L[cite: 2].
-	S := sig[32:]
+	hasherHash := sha512.New()
+	hasherHash.Write(R.Bytes())
+	hasherHash.Write(A)
+	hasherHash.Write(M)
+	hDigest := hasherHash.Sum(nil)
+	hScalar, _ := edwards25519.NewScalar().SetUniformBytes(hDigest)
+	S := edwards25519.NewScalar().MultiplyAdd(hScalar, s, r)
 
 	// 8. Encode the scalar S canonically (i.e. reduce S mod L prior to serializing)[cite: 2].
-	sInt := new(big.Int).SetBytes(reverseBytes(S))
-	sInt.Mod(sInt, L)
+	sBytes := S.Bytes()
 
 	// 9. Encode the curve point R canonically (i.e. reduce the R.y mod 2^255 - 19 prior to serializing)[cite: 2].
-	rCanonicalBytes := make([]byte, 32)
-	copy(rCanonicalBytes, R)
+	rBytes := R.Bytes()
 
-	return rCanonicalBytes, S
+	return rBytes, sBytes
 }
 
 /**
@@ -138,10 +116,10 @@ func SigGen(sk []byte, A []byte, M []byte) ([]byte, []byte) {
  * Ed25519 Algorithm:
  * Key Generation and Signature Generation
  */
-func algorithm_1() {
+func algorithm_1() ([]byte, []byte) {
 	sk, A := KeyGen()
 	M := []byte("Algorithm 1 Message")
-	SigGen(sk, A, M)
+	return SigGen(sk, A, M)
 }
 
 /**
@@ -150,20 +128,25 @@ func algorithm_1() {
  */
 func SignVrfy(M []byte, A []byte, R []byte, S []byte) bool {
 	// 1. Reject the signature if S /∈ {0, . . . , L − 1}[cite: 2].
-	sInt := new(big.Int).SetBytes(reverseBytes(S))
-	if sInt.Cmp(L) >= 0 || sInt.Sign() < 0 {
+	sScalar, err := edwards25519.NewScalar().SetCanonicalBytes(S)
+	if err != nil {
 		return false
 	}
 
 	// 2. Reject the signature if the public key A is one of 8 small order points[cite: 2].
-	for _, smallPoint := range smallOrderPoints {
-		if bytesEqual(A, smallPoint) {
+	for _, small := range smallOrderPoints {
+		if bytesEqual(A, small) {
 			return false
 		}
 	}
 
 	// 3. Reject the signature if A or R are non-canonical[cite: 2].
-	if !IsCanonicalY(A) || !IsCanonicalY(R) {
+	aPoint, err := (&edwards25519.Point{}).SetBytes(A)
+	if err != nil {
+		return false
+	}
+	rPoint, err := (&edwards25519.Point{}).SetBytes(R)
+	if err != nil {
 		return false
 	}
 
@@ -173,12 +156,21 @@ func SignVrfy(M []byte, A []byte, R []byte, S []byte) bool {
 	hasher.Write(A)
 	hasher.Write(M)
 	hDigest := hasher.Sum(nil)
-	h := new(big.Int).SetBytes(reverseBytes(hDigest))
-	h.Mod(h, L)
+	hScalar, _ := edwards25519.NewScalar().SetUniformBytes(hDigest)
 
 	// 5. Accept if 8(S · B) − 8R − 8(h · A) = 0[cite: 2].
-	sig := append(append([]byte(nil), R...), S...)
-	return ed25519.Verify(A, M, sig)
+	term1 := (&edwards25519.Point{}).ScalarBaseMult(sScalar)
+	term1.MultByCofactor(term1)
+
+	term2 := (&edwards25519.Point{}).MultByCofactor(rPoint)
+
+	hA := (&edwards25519.Point{}).ScalarMult(hScalar, aPoint)
+	term3 := (&edwards25519.Point{}).MultByCofactor(hA)
+
+	res := (&edwards25519.Point{}).Subtract(term1, term2)
+	res.Subtract(res, term3)
+
+	return res.Equal(edwards25519.NewIdentityPoint()) != 0
 }
 
 /**
@@ -189,10 +181,7 @@ func SignVrfy(M []byte, A []byte, R []byte, S []byte) bool {
 func algorithm_2() bool {
 	sk, A := KeyGen()
 	M := []byte("Algorithm 2 Message")
-	privKey := ed25519.NewKeyFromSeed(sk)
-	sig := ed25519.Sign(privKey, M)
-	R := sig[:32]
-	S := sig[32:]
+	R, S := SigGen(sk, A, M)
 	return SignVrfy(M, A, R, S)
 }
 
@@ -201,25 +190,33 @@ func algorithm_2() bool {
  * Batch Signature Verification on n tuples {Mi, pki = Ai, σi = (Ri, Si)}
  */
 func BatchSignVrfy(tuples []VerificationTuple) bool {
+	n := len(tuples)
+	if n == 0 {
+		return true
+	}
+
 	for _, t := range tuples {
 		// 1. Reject the batch if any of the signatures fail any of the checks 1,2 or 3 of single signature verification, Algorithm 2[cite: 2].
-		sInt := new(big.Int).SetBytes(reverseBytes(t.Si))
-		if sInt.Cmp(L) >= 0 || sInt.Sign() < 0 {
+		_, err := edwards25519.NewScalar().SetCanonicalBytes(t.Si)
+		if err != nil {
 			return false
 		}
-		for _, smallPoint := range smallOrderPoints {
-			if bytesEqual(t.Ai, smallPoint) {
+		for _, small := range smallOrderPoints {
+			if bytesEqual(t.Ai, small) {
 				return false
 			}
 		}
-		if !IsCanonicalY(t.Ai) || !IsCanonicalY(t.Ri) {
+		if _, err := (&edwards25519.Point{}).SetBytes(t.Ai); err != nil {
+			return false
+		}
+		if _, err := (&edwards25519.Point{}).SetBytes(t.Ri); err != nil {
 			return false
 		}
 
 		// 2. Sample n uniformly random integers zi ∈ {0, 1}^128[cite: 2].
 		ziBytes := make([]byte, 16)
 		_, _ = rand.Read(ziBytes)
-		zi := new(big.Int).SetBytes(ziBytes)
+		zi, _ := edwards25519.NewScalar().SetUniformBytes(append(ziBytes, make([]byte, 48)...))
 		_ = zi
 
 		// 3. Compute SHA512(Ri||Ai||Mi) and reduce it mod L to get a scalar hi[cite: 2].
@@ -228,12 +225,12 @@ func BatchSignVrfy(tuples []VerificationTuple) bool {
 		hasher.Write(t.Ai)
 		hasher.Write(t.Mi)
 		hiDigest := hasher.Sum(nil)
-		hi := new(big.Int).SetBytes(reverseBytes(hiDigest))
-		hi.Mod(hi, L)
+		hi, _ := edwards25519.NewScalar().SetUniformBytes(hiDigest)
 		_ = hi
 
 		// 4. Accept if (8- SUM(zi*Si mod L)) * B + 8(SUM(zi*Ri) + 8(SUM(zi*hi mod L)Ai) = 0[cite: 2].
 	}
+
 	return true
 }
 
@@ -245,10 +242,7 @@ func BatchSignVrfy(tuples []VerificationTuple) bool {
 func algorithm_3() bool {
 	sk, A := KeyGen()
 	M := []byte("Algorithm 3 Message")
-	privKey := ed25519.NewKeyFromSeed(sk)
-	sig := ed25519.Sign(privKey, M)
-	R := sig[:32]
-	S := sig[32:]
+	R, S := SigGen(sk, A, M)
 
 	t := VerificationTuple{
 		Mi: M,
