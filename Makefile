@@ -15,5 +15,8 @@ build: download_deps
 download_deps:
 	@go get filippo.io/edwards25519
 
+test:
+	@go test ./...
+
 clean:
 	@rm -rf $(BIN_DIR)
