@@ -1,0 +1,16 @@
+.PHONY: run build clean
+
+BIN_DIR		:=bin
+APP_NAME	:=ed-dsa
+BIN			:=$(BIN_DIR)/$(APP_NAME)
+LIB_ARCHIVE := $(BIN_DIR)/$(APP_NAME).a
+
+run: build
+	@./$(BIN)
+
+build:
+	@mkdir -p $(BIN_DIR)
+	go build -buildmode=archive -o $(LIB_ARCHIVE) $(LIB_PKG)
+
+clean:
+	@rm -rf $(BIN_DIR)

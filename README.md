@@ -1,11 +1,21 @@
+[![Tests](https://github.com/ozneroL541/ed-dsa/actions/workflows/test.yml/badge.svg)](https://github.com/ozneroL541/ed-dsa/actions/workflows/test.yml)
 # Edwards-curve Digital Signature Algorithm
+Go implementation of EdDSA.
 
 > [!Warning]
 > Do not use this code in real-world implementation.
 
 ## Compilation
+To create the library binary run
+```sh
+make build
+```
 
-## Execution
+## Test
+To run the Known Answer Tests for EdDSA run:
+```sh
+make test
+```
 
 ## Author
 - 267234 Marco Egidio Pusceddu @MARCO5P
