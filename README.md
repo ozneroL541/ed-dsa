@@ -1,3 +1,4 @@
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE.md)
 [![Tests](https://github.com/ozneroL541/ed-dsa/actions/workflows/test.yml/badge.svg)](https://github.com/ozneroL541/ed-dsa/actions/workflows/test.yml)
 # Edwards-curve Digital Signature Algorithm
 Go implementation of EdDSA.
