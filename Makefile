@@ -13,7 +13,7 @@ build: download_deps
 	go build -buildmode=archive -o $(LIB_ARCHIVE) $(LIB_PKG)
 
 download_deps:
-	@go get filippo.io/edwards25519
+	@go mod download
 
 test: download_deps
 	@go test ./...
