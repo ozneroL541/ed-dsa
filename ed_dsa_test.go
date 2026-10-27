@@ -53,6 +53,6 @@ func TestKnownAnswerTests(t *testing.T) {
 		S := sigBytes[32:]
 		/* Verify the signature */
 		valid := SignVrfy(msgBytes, pubBytes, R, S)
-		t.Logf("Vector %d verification result: %v", i, valid)
+		t.Logf("Vector %3d verification result: %v", i, valid)
 	}
 }
