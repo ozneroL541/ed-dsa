@@ -15,7 +15,7 @@ build: download_deps
 download_deps:
 	@go get filippo.io/edwards25519
 
-test:
+test: download_deps
 	@go test ./...
 
 clean:
