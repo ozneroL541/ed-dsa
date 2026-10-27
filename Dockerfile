@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.27.1 AS tests
+FROM golang:1.27.3 AS tests
 WORKDIR /app
 # Cache dependencies to speed up builds
 COPY go.* ./
