@@ -8,51 +8,54 @@ import (
 )
 
 /**
- * Known Answer Tests (KATs) Vector Structure
+ * RFC 8032 Test Vector Structure
  */
-type KATVector struct {
-	Message   string `json:"message"`   /** Message in hex format */
-	PublicKey string `json:"pub_key"`   /** Public key in hex format */
-	Signature string `json:"signature"` /** Signature in hex format */
+type RFC8032TestVector struct {
+	Name      string `json:"name"`
+	Algorithm string `json:"algothm"`
+	SecretKey string `json:"sectret_key"`
+	PublicKey string `json:"pub_key"`
+	Message   string `json:"message"`
+	Signature string `json:"signature"`
 }
 
 /**
- * JSON file containing KATs from
- * DOI: 10.1007/978-3-030-64357-7_4
- * Paper 2020/1244
- * Taming the many EdDSAs
- * Konstantinos Chalkias, François Garillot, and Valeria Nikolaenko
+ * JSON file containing KATs
+ * RFC 8032
+ * link: https://www.rfc-editor.org/info/rfc8032/#section-7
  */
-const katFilePath = "kat.json"
+const kat2FilePath = "kat.json"
 
-func TestKnownAnswerTests(t *testing.T) {
-	file, err := os.Open(katFilePath)
+func TestRFC8032CustomImplementation(t *testing.T) {
+	file, err := os.Open(kat2FilePath)
 	if err != nil {
-		t.Fatalf("failed to open %s: %v", katFilePath, err)
+		t.Fatalf("failed to open %s: %v", kat2FilePath, err)
 	}
 	defer file.Close()
-	/* List of KAT vectors */
-	var vectors []KATVector
+
+	var vectors []RFC8032TestVector
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&vectors); err != nil {
-		t.Fatalf("failed to parse %s: %v", katFilePath, err)
+		t.Fatalf("failed to parse %s: %v", kat2FilePath, err)
 	}
-	/* For each KAT vector, verify the signature */
-	for i, v := range vectors {
-		/* Decode hex strings to byte slices */
-		msgBytes, _ := hex.DecodeString(v.Message)
-		pubBytes, _ := hex.DecodeString(v.PublicKey)
-		sigBytes, _ := hex.DecodeString(v.Signature)
-		/* Check signature length */
-		if len(sigBytes) != 64 {
-			t.Errorf("vector %d: invalid signature length %d", i, len(sigBytes))
+
+	for _, v := range vectors {
+		if v.Algorithm != "Ed25519" {
+			t.Logf("Skipping test vector %s: unsupported algorithm %s", v.Name, v.Algorithm)
 			continue
 		}
-		/* Split signature into R and S components */
-		R := sigBytes[:32]
-		S := sigBytes[32:]
-		/* Verify the signature */
-		valid := SignVrfy(msgBytes, pubBytes, R, S)
-		t.Logf("Vector %3d verification result: %v", i, valid)
+		t.Run(v.Name, func(t *testing.T) {
+			expectedPub, _ := hex.DecodeString(v.PublicKey)
+			msgBytes, _ := hex.DecodeString(v.Message)
+			sigBytes, _ := hex.DecodeString(v.Signature)
+			// Extract R and S from the signature
+			R := sigBytes[:32]
+			S := sigBytes[32:]
+			// 3. Test verification
+			valid := SignVrfy(msgBytes, expectedPub, R, S)
+			if !valid {
+				t.Errorf("%s failed custom SignVrfy validation", v.Name)
+			}
+		})
 	}
 }
