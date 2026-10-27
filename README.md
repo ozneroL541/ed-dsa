@@ -7,13 +7,14 @@ Go implementation of EdDSA.
 > Do not use this code in real-world implementation.
 
 ## Compilation
-To create the library binary run
+To create the library binary run:
 ```sh
 make build
 ```
+It will create the archive file `bin/ed-dsa.a`.
 
 ## Test
-To run the Known Answer Tests for EdDSA run:
+To run Known Answer Tests for EdDSA execute:
 ```sh
 make test
 ```
