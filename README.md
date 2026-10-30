@@ -1,5 +1,5 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE.md)
-[![Tests](https://github.com/ozneroL541/ed-dsa/actions/workflows/test.yml/badge.svg)](https://github.com/ozneroL541/ed-dsa/actions/workflows/test.yml)
+[![Tests](https://github.com/radix54/ed-dsa/actions/workflows/test.yml/badge.svg)](https://github.com/radix54/ed-dsa/actions/workflows/test.yml)
 # Edwards-curve Digital Signature Algorithm
 Go implementation of EdDSA.
 
@@ -21,7 +21,7 @@ make test
 
 ## Author
 - 267234 Marco Egidio Pusceddu @MARCO5P
-- 267646 Radice Lorenzo @ozneroL541
+- 267646 Radice Lorenzo @radix54
 
 ## License
 Copyright (C) 2026 Marco Egidio Pusceddu, Lorenzo Radice
